@@ -104,6 +104,7 @@ def test_duplicate_rows_are_counted_and_removed_in_target_order() -> None:
     assert summary.unmapped_targets == 1
     assert summary.rows_in == 3
     assert summary.rows_removed == 1
+    assert summary.duplicate_rows == 1
     assert summary.rows_kept == 2
     assert output.iloc[0, 0] == 1
     assert output.iloc[0, 1] == 3
@@ -125,6 +126,7 @@ def test_keeping_duplicate_rows_is_the_default() -> None:
         drop_duplicate_rows=False,
     )
     assert summary.rows_removed == 0
+    assert summary.duplicate_rows == 1
     assert summary.rows_kept == 2
     assert len(output) == 2
 

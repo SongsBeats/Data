@@ -40,7 +40,7 @@ Set `GEMINI_API_KEY` in the project environment. The page does not ask for a key
 
 Duplicate headers become `name`, `name__2`, `name__3` on screen. The download uses the original text again.
 
-Columns with the same values are flagged. **Remove fully duplicate rows** shows how many rows that would drop.
+Columns with the same values are flagged. The source file line and **Remove fully duplicate rows** show how many rows are duplicates. The result repeats that count, whether those rows are kept or removed.
 
 If you pick a source column that is already mapped, the page refuses the change and tells you to clear the other row first.
 

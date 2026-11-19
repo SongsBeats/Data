@@ -216,8 +216,8 @@
         state.duplicateRows = data.duplicate_rows || 0;
         state.duplicateHeaders = data.duplicate_headers || [];
         state.identical = data.identical_columns || [];
-        $("dupe-count").textContent = `(${state.duplicateRows} would be removed)`;
-        $("source-meta").textContent = `${data.filename} · ${data.rows} rows · ${data.columns} columns`;
+        showDuplicateCount(state.duplicateRows);
+        $("source-meta").textContent = `${data.filename} · ${data.rows} rows · ${data.columns} columns · ${duplicatePhrase(state.duplicateRows)}`;
       } else {
         $("target-chips").innerHTML = "";
         (data.headers || []).forEach((header) => {
@@ -261,7 +261,7 @@
       state.sourceProfiles = data.source_profiles;
       state.targetProfiles = data.target_profiles;
       state.duplicateRows = data.duplicate_rows || 0;
-      $("dupe-count").textContent = `(${state.duplicateRows} would be removed)`;
+      showDuplicateCount(state.duplicateRows);
       $("review").classList.remove("hidden");
       renderMappings();
       renderPrivacy();
@@ -349,6 +349,15 @@
       refreshPreview();
     }
 
+    function duplicatePhrase(count) {
+      const n = Number(count) || 0;
+      return n === 1 ? "1 duplicate row" : `${n} duplicate rows`;
+    }
+
+    function showDuplicateCount(count) {
+      $("dupe-count").textContent = ` (${duplicatePhrase(count)})`;
+    }
+
     function confidence(row) {
       if (!row.source || row.confidence <= 0) return { text: "None", cls: "low" };
       const score = Number(row.confidence).toFixed(2);
@@ -389,19 +398,23 @@
       showNote(data.message || "Local matches are ready. Remaining headers were left blank.");
     }
 
+    let previewSerial = 0;
+
     async function refreshPreview() {
       if (!state.mappings.length) return;
+      const serial = ++previewSerial;
+      const drop = $("drop-dupes").checked;
       const body = filesForm();
       body.append("mappings", JSON.stringify(state.mappings));
-      body.append("drop_duplicates", $("drop-dupes").checked ? "1" : "0");
+      body.append("drop_duplicates", drop ? "1" : "0");
       body.append("preview", "1");
       const data = await post("/api/convert", body);
-      if (!data) return;
-      const removed = data.rows_removed === 1
-        ? " 1 fully duplicate row was removed."
-        : data.rows_removed
-          ? ` ${data.rows_removed} fully duplicate rows were removed.`
-          : " Duplicate rows were kept.";
+      if (!data || serial !== previewSerial) return;
+      const duplicates = Number(data.duplicate_rows) || 0;
+      showDuplicateCount(duplicates);
+      const removed = drop
+        ? (duplicates ? ` ${duplicatePhrase(duplicates)} removed.` : " No duplicate rows to remove.")
+        : (duplicates ? ` ${duplicatePhrase(duplicates)} kept.` : " No duplicate rows.");
       $("summary").textContent = `${data.columns_mapped} target columns received a source. ${data.unmapped_targets} were left blank. ${data.rows_kept} of ${data.rows_in} rows are in the file.${removed}`;
       $("before").innerHTML = grid(data.before);
       $("after").innerHTML = grid(data.preview);

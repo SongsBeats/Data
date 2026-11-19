@@ -152,6 +152,7 @@ class ConvertSummary:
     rows_in: int
     rows_kept: int
     rows_removed: int
+    duplicate_rows: int
 
 
 # --- headers -----------------------------------------------------------------
@@ -891,8 +892,9 @@ def convert_frame(
         output = pd.DataFrame(columns=names)
 
     rows_in = int(len(output))
+    duplicate_rows = duplicate_row_count(output)
     rows_removed = 0
-    if drop_duplicate_rows and not output.empty:
+    if drop_duplicate_rows and duplicate_rows:
         before = len(output)
         output = output.drop_duplicates().reset_index(drop=True)
         rows_removed = int(before - len(output))
@@ -902,6 +904,7 @@ def convert_frame(
         rows_in=rows_in,
         rows_kept=int(len(output)),
         rows_removed=rows_removed,
+        duplicate_rows=duplicate_rows,
     )
     return output, summary
 

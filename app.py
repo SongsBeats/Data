@@ -338,6 +338,7 @@ async def convert_sheet(
         "rows_in": summary.rows_in,
         "rows_kept": summary.rows_kept,
         "rows_removed": summary.rows_removed,
+        "duplicate_rows": summary.duplicate_rows,
         "preview": _table(output.fillna("")),
         "before": _table(source_table.frame),
     }

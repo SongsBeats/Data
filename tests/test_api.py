@@ -73,6 +73,7 @@ def test_convert_drops_one_duplicate_row_and_keeps_target_order() -> None:
     body = response.json()
     assert body["rows_in"] == 4
     assert body["rows_removed"] == 1
+    assert body["duplicate_rows"] == 1
     assert body["rows_kept"] == 3
     assert body["preview"]["columns"][0] == "customer_name"
     assert "secret@secret.com" not in response.text
