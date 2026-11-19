@@ -1,0 +1,2 @@
+customer_name,email,mobile,order_id,amount,shipping_address,notes,coupon
+DO_NOT_READ,secret@secret.com,0000000000,HIDDEN,1,hidden street,hidden,SAVE10

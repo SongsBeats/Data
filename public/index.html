@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Header Mapper</title>
+  <style>
+    :root { color-scheme: light dark; --accent: #0f6e56; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.5 system-ui, sans-serif;
+      background: Canvas;
+      color: CanvasText;
+    }
+    main { max-width: 960px; margin: 0 auto; padding: 40px 20px 72px; }
+    h1 { font-size: 1.75rem; font-weight: 650; margin: 0 0 8px; }
+    h2 { font-size: 1.05rem; margin: 28px 0 10px; }
+    p { margin: 0 0 12px; }
+    .muted { opacity: 0.75; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    input[type="file"], input[type="password"], input[type="text"], select {
+      width: 100%;
+      font: inherit;
+      padding: 8px 10px;
+      border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+      border-radius: 8px;
+      background: Canvas;
+      color: CanvasText;
+    }
+    .checks { display: flex; flex-wrap: wrap; gap: 16px; margin: 12px 0; }
+    .checks label { font-weight: 500; }
+    button, .button {
+      font: inherit;
+      background: var(--accent);
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 14px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    button.plain {
+      background: transparent;
+      color: CanvasText;
+      border: 1px solid color-mix(in srgb, CanvasText 30%, transparent);
+    }
+    button:disabled { opacity: 0.45; cursor: default; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, transparent); vertical-align: top; }
+    select.inline { width: auto; min-width: 160px; }
+    .high { color: #0f6e56; font-weight: 700; }
+    .mid { color: #9a6700; font-weight: 700; }
+    .low { color: #b42318; font-weight: 700; }
+    .banner, .error, .chips span, pre {
+      border-radius: 8px;
+    }
+    .banner, .error { padding: 10px 12px; margin: 8px 0; }
+    .banner { background: color-mix(in srgb, CanvasText 8%, Canvas); }
+    .error { background: color-mix(in srgb, #b42318 12%, Canvas); }
+    .chips span {
+      display: inline-block;
+      margin: 0 6px 6px 0;
+      padding: 2px 8px;
+      border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+    }
+    pre {
+      overflow: auto;
+      padding: 12px;
+      background: color-mix(in srgb, CanvasText 6%, Canvas);
+      font-size: 12px;
+    }
+    .hidden { display: none; }
+    .scroll { overflow-x: auto; }
+    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Header Mapper</h1>
+    <p class="muted">Upload a source sheet and a target sheet. The download uses the target's column names. Files are processed in memory and are not saved.</p>
+
+    <div class="grid">
+      <div>
+        <label for="source">Source file</label>
+        <input id="source" type="file" accept=".csv,.xlsx">
+        <p id="source-sheet-wrap" class="hidden"><label for="source-sheet">Worksheet</label><select id="source-sheet"></select></p>
+        <p id="source-meta" class="muted"></p>
+      </div>
+      <div>
+        <label for="target">Target file (headers only)</label>
+        <input id="target" type="file" accept=".csv,.xlsx">
+        <p id="target-sheet-wrap" class="hidden"><label for="target-sheet">Worksheet</label><select id="target-sheet"></select></p>
+        <div id="target-chips" class="chips"></div>
+      </div>
+    </div>
+    <p class="muted">CSV or Excel, up to 4 MB for the pair. The first row is the header.</p>
+
+    <h2>Settings</h2>
+    <label for="threshold">Fuzzy match threshold <span id="threshold-value">0.90</span></label>
+    <input id="threshold" type="range" min="0.60" max="1" step="0.01" value="0.90">
+    <div class="checks">
+      <label><input id="drop-dupes" type="checkbox"> Remove fully duplicate rows <span id="dupe-count"></span></label>
+      <label><input id="headers-only" type="checkbox"> Headers only (send no samples)</label>
+    </div>
+
+    <div class="actions">
+      <button id="match" type="button">Match headers</button>
+      <button id="reset" type="button" class="plain">Start over</button>
+    </div>
+    <div id="message"></div>
+
+    <section id="review" class="hidden">
+      <h2>Mapping</h2>
+      <div id="warnings"></div>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Target header</th>
+              <th>Source column</th>
+              <th>Confidence</th>
+              <th>Reason</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="mapping-body"></tbody>
+        </table>
+      </div>
+      <p id="unused" class="muted"></p>
+
+      <h2>Privacy</h2>
+      <p class="muted">For headers that are still empty, Gemini reviews this in the background. Sensitive columns send shape patterns only (A upper, a lower, 9 digit). Other columns send at most three samples, with emails and phone numbers replaced by tags.</p>
+      <pre id="payload"></pre>
+
+      <h2>Result</h2>
+      <p id="summary"></p>
+      <div class="grid">
+        <div>
+          <p><strong>Before</strong></p>
+          <div class="scroll" id="before"></div>
+        </div>
+        <div>
+          <p><strong>After</strong></p>
+          <div class="scroll" id="after"></div>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="csv" type="button">Download CSV</button>
+        <button id="xlsx" type="button" class="plain">Download Excel</button>
+      </div>
+    </section>
+  </main>
+  <script>
+    const state = {
+      sourceFile: null,
+      targetFile: null,
+      mappings: [],
+      choices: [],
+      labels: {},
+      sourceProfiles: [],
+      targetProfiles: [],
+      duplicateRows: 0,
+      duplicateHeaders: [],
+      identical: []
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    $("threshold").addEventListener("input", () => {
+      $("threshold-value").textContent = Number($("threshold").value).toFixed(2);
+    });
+    $("source").addEventListener("change", () => onFile("source"));
+    $("target").addEventListener("change", () => onFile("target"));
+    $("source-sheet").addEventListener("change", () => onFile("source"));
+    $("target-sheet").addEventListener("change", () => onFile("target"));
+    $("match").addEventListener("click", matchHeaders);
+    $("reset").addEventListener("click", startOver);
+    $("headers-only").addEventListener("change", renderPrivacy);
+    $("drop-dupes").addEventListener("change", () => refreshPreview());
+    $("csv").addEventListener("click", () => download("csv"));
+    $("xlsx").addEventListener("click", () => download("xlsx"));
+
+    function startOver() {
+      state.sourceFile = null;
+      state.targetFile = null;
+      state.mappings = [];
+      $("source").value = "";
+      $("target").value = "";
+      $("source-meta").textContent = "";
+      $("target-chips").textContent = "";
+      $("source-sheet-wrap").classList.add("hidden");
+      $("target-sheet-wrap").classList.add("hidden");
+      $("review").classList.add("hidden");
+      $("message").textContent = "";
+      $("dupe-count").textContent = "";
+    }
+
+    async function onFile(kind) {
+      const input = $(kind);
+      const file = input.files && input.files[0];
+      if (!file) return;
+      if (kind === "source") state.sourceFile = file;
+      else state.targetFile = file;
+      const body = new FormData();
+      body.append("file", file);
+      const sheet = $(kind + "-sheet").value;
+      if (sheet) body.append("sheet", sheet);
+      const data = await post("/api/" + kind, body);
+      if (!data) return;
+      fillSheets(kind, data.sheets || [], data.sheet || "");
+      if (kind === "source") {
+        state.duplicateRows = data.duplicate_rows || 0;
+        state.duplicateHeaders = data.duplicate_headers || [];
+        state.identical = data.identical_columns || [];
+        $("dupe-count").textContent = `(${state.duplicateRows} would be removed)`;
+        $("source-meta").textContent = `${data.filename} · ${data.rows} rows · ${data.columns} columns`;
+      } else {
+        $("target-chips").innerHTML = "";
+        (data.headers || []).forEach((header) => {
+          const chip = document.createElement("span");
+          chip.textContent = header;
+          $("target-chips").appendChild(chip);
+        });
+      }
+    }
+
+    function fillSheets(kind, sheets, selected) {
+      const wrap = $(kind + "-sheet-wrap");
+      const select = $(kind + "-sheet");
+      if (!sheets || sheets.length < 2) {
+        wrap.classList.add("hidden");
+        select.innerHTML = "";
+        return;
+      }
+      const current = select.value;
+      select.innerHTML = "";
+      sheets.forEach((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        select.appendChild(option);
+      });
+      select.value = sheets.includes(current) ? current : (selected || sheets[0]);
+      wrap.classList.remove("hidden");
+    }
+
+    async function matchHeaders() {
+      if (!state.sourceFile || !state.targetFile) {
+        showError("Choose a source file and a target file first.");
+        return;
+      }
+      const data = await post("/api/match", filesForm());
+      if (!data) return;
+      state.mappings = data.mappings;
+      state.choices = data.choices;
+      state.labels = data.target_labels;
+      state.sourceProfiles = data.source_profiles;
+      state.targetProfiles = data.target_profiles;
+      state.duplicateRows = data.duplicate_rows || 0;
+      $("dupe-count").textContent = `(${state.duplicateRows} would be removed)`;
+      $("review").classList.remove("hidden");
+      renderMappings();
+      renderPrivacy();
+      await refreshPreview();
+      if (state.mappings.some((row) => !row.source)) {
+        showNote("Checking the remaining headers.");
+        await suggest();
+      } else {
+        showNote("Local matches are ready.");
+      }
+    }
+
+    function filesForm() {
+      const body = new FormData();
+      body.append("source", state.sourceFile);
+      body.append("target", state.targetFile);
+      body.append("source_sheet", $("source-sheet").value || "");
+      body.append("target_sheet", $("target-sheet").value || "");
+      body.append("threshold", $("threshold").value);
+      return body;
+    }
+
+    function renderMappings() {
+      const body = $("mapping-body");
+      body.innerHTML = "";
+      const used = new Set(state.mappings.filter((row) => row.source).map((row) => row.source));
+      state.mappings.forEach((row) => {
+        const tr = document.createElement("tr");
+        const badge = confidence(row);
+        tr.innerHTML = `
+          <td>${escapeText(state.labels[row.target] || row.target)}</td>
+          <td></td>
+          <td class="${badge.cls}">${escapeText(badge.text)}</td>
+          <td>${escapeText(row.reason || "")}</td>
+          <td>${escapeText(row.status)}</td>`;
+        const select = document.createElement("select");
+        select.className = "inline";
+        const clear = document.createElement("option");
+        clear.value = "";
+        clear.textContent = "Clear";
+        select.appendChild(clear);
+        state.choices.forEach((choice) => {
+          const option = document.createElement("option");
+          option.value = choice.name;
+          option.textContent = choice.label;
+          select.appendChild(option);
+        });
+        select.value = row.source || "";
+        select.addEventListener("change", () => choose(row.target, select));
+        tr.children[1].appendChild(select);
+        body.appendChild(tr);
+      });
+      const unused = state.choices.filter((choice) => !used.has(choice.name));
+      $("unused").textContent = unused.length
+        ? "Unused source columns: " + unused.map((choice) => choice.label).join(", ")
+        : "Every source column is used.";
+      const warnings = $("warnings");
+      warnings.innerHTML = "";
+      if (state.duplicateHeaders.length) {
+        warnings.appendChild(note(`Duplicate headers: ${state.duplicateHeaders.join(", ")}. They are shown as name, name__2, name__3. The download uses the original text.`));
+      }
+      state.identical.forEach((group) => {
+        warnings.appendChild(note(`These columns contain the same values: ${group.join(", ")}.`));
+      });
+    }
+
+    function choose(target, select) {
+      const choice = select.value;
+      const current = state.mappings.find((row) => row.target === target);
+      if (choice) {
+        const other = state.mappings.find((row) => row.target !== target && row.source === choice);
+        if (other) {
+          showError(`'${choice}' is already mapped to '${state.labels[other.target] || other.target}'. Clear that row, then assign it here.`);
+          select.value = current.source || "";
+          return;
+        }
+      }
+      current.source = choice || null;
+      current.confidence = choice ? 1 : 0;
+      current.reason = choice ? "Chosen manually." : "Cleared.";
+      current.status = choice ? "Matched" : "Unmapped";
+      current.origin = "manual";
+      renderMappings();
+      renderPrivacy();
+      refreshPreview();
+    }
+
+    function confidence(row) {
+      if (!row.source || row.confidence <= 0) return { text: "None", cls: "low" };
+      const score = Number(row.confidence).toFixed(2);
+      if (row.confidence >= 0.9) return { text: "High " + score, cls: "high" };
+      if (row.confidence >= 0.6) return { text: "Review " + score, cls: "mid" };
+      return { text: "Low " + score, cls: "low" };
+    }
+
+    function currentPayload() {
+      const headersOnly = $("headers-only").checked;
+      const used = new Set(state.mappings.filter((row) => row.source).map((row) => row.source));
+      const unresolved = new Set(state.mappings.filter((row) => !row.source).map((row) => row.target));
+      const trim = (item) => {
+        if (!headersOnly) return item;
+        return { header: item.header, type: item.type, sensitive: item.sensitive };
+      };
+      return {
+        headers_only: headersOnly,
+        targets: state.targetProfiles.filter((item) => unresolved.has(item.header)).map(trim),
+        sources: state.sourceProfiles.filter((item) => !used.has(item.header)).map(trim)
+      };
+    }
+
+    function renderPrivacy() {
+      $("payload").textContent = JSON.stringify(currentPayload(), null, 2);
+    }
+
+    async function suggest() {
+      const body = filesForm();
+      body.append("mappings", JSON.stringify(state.mappings));
+      body.append("headers_only", $("headers-only").checked ? "1" : "0");
+      const data = await post("/api/suggest", body);
+      if (!data) return;
+      state.mappings = data.mappings;
+      renderMappings();
+      renderPrivacy();
+      await refreshPreview();
+      showNote(data.message || "Local matches are ready. Remaining headers were left blank.");
+    }
+
+    async function refreshPreview() {
+      if (!state.mappings.length) return;
+      const body = filesForm();
+      body.append("mappings", JSON.stringify(state.mappings));
+      body.append("drop_duplicates", $("drop-dupes").checked ? "1" : "0");
+      body.append("preview", "1");
+      const data = await post("/api/convert", body);
+      if (!data) return;
+      const removed = data.rows_removed === 1
+        ? " 1 fully duplicate row was removed."
+        : data.rows_removed
+          ? ` ${data.rows_removed} fully duplicate rows were removed.`
+          : " Duplicate rows were kept.";
+      $("summary").textContent = `${data.columns_mapped} target columns received a source. ${data.unmapped_targets} were left blank. ${data.rows_kept} of ${data.rows_in} rows are in the file.${removed}`;
+      $("before").innerHTML = grid(data.before);
+      $("after").innerHTML = grid(data.preview);
+    }
+
+    async function download(format) {
+      const body = filesForm();
+      body.append("mappings", JSON.stringify(state.mappings));
+      body.append("drop_duplicates", $("drop-dupes").checked ? "1" : "0");
+      body.append("file_format", format);
+      const response = await fetch("/api/convert", { method: "POST", body });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        showError(data.error || "The file could not be built. Retry.");
+        return;
+      }
+      const blob = await response.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = format === "xlsx" ? "mapped.xlsx" : "mapped.csv";
+      link.click();
+      URL.revokeObjectURL(link.href);
+      showNote("Download started.");
+    }
+
+    function grid(table) {
+      if (!table || !table.columns) return "";
+      const head = table.columns.map((column) => `<th>${escapeText(column)}</th>`).join("");
+      const rows = table.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeText(cell)}</td>`).join("")}</tr>`).join("");
+      return `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    async function post(url, body) {
+      $("message").textContent = "";
+      let response;
+      try {
+        response = await fetch(url, { method: "POST", body });
+      } catch (error) {
+        showError("The request did not reach the server. Retry.");
+        return null;
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showError(data.error || "The request failed. Check the file and retry.");
+        return null;
+      }
+      return data;
+    }
+
+    function showError(text) {
+      $("message").innerHTML = "";
+      const box = document.createElement("div");
+      box.className = "error";
+      box.textContent = text;
+      $("message").appendChild(box);
+    }
+
+    function showNote(text) {
+      $("message").innerHTML = "";
+      const box = document.createElement("div");
+      box.className = "banner";
+      box.textContent = text;
+      $("message").appendChild(box);
+    }
+
+    function note(text) {
+      const box = document.createElement("div");
+      box.className = "banner";
+      box.textContent = text;
+      return box;
+    }
+
+    function escapeText(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+  </script>
+</body>
+</html>
